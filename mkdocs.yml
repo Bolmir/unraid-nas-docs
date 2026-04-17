@@ -1,5 +1,5 @@
 site_name: HOMELAB NAS Dokumentation
-site_description: Automatisch gepflegte Dokumentation des Unraid NAS
+site_description: Automatisch gepflegte Dokumentation des Unraid NAS HOMELAB
 site_url: https://bolmir.github.io/unraid-nas-docs
 repo_url: https://github.com/Bolmir/unraid-nas-docs
 repo_name: Bolmir/unraid-nas-docs
@@ -11,12 +11,24 @@ theme:
     - scheme: slate
       primary: orange
       accent: orange
+      toggle:
+        icon: material/brightness-4
+        name: Hell-Modus
+    - scheme: default
+      primary: orange
+      accent: orange
+      toggle:
+        icon: material/brightness-7
+        name: Dunkel-Modus
   features:
     - navigation.tabs
     - navigation.sections
     - navigation.top
+    - navigation.indexes
     - search.suggest
+    - search.highlight
     - content.tables
+    - toc.integrate
 
 nav:
   - Home: index.md
@@ -29,6 +41,14 @@ nav:
     - Docker Container: services/docker-containers.md
   - Netzwerk:
     - Übersicht: network/overview.md
+  - Einrichtung:
+    - Unraid Neuinstallation: setup/unraid.md
+    - Docker Container Setup: setup/docker.md
+    - Dienste-Konfiguration: setup/services.md
+  - Sicherheit:
+    - Passwörter & Bitwarden: security/passwords.md
+  - Disaster Recovery:
+    - Notfallplan: disaster-recovery/plan.md
   - Wartung:
     - Backup: maintenance/backup.md
 
@@ -40,3 +60,7 @@ markdown_extensions:
   - admonition
   - pymdownx.details
   - pymdownx.superfences
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - attr_list
+  - def_list
