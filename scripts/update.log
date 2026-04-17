@@ -73,3 +73,12 @@ remote:
 To https://github.com/Bolmir/unraid-nas-docs.git
  ! [remote rejected] main -> main (push declined due to repository rule violations)
 error: failed to push some refs to 'https://github.com/Bolmir/unraid-nas-docs.git'
+[2026-04-17 18:16] === Update gestartet ===
+From https://github.com/Bolmir/unraid-nas-docs
+ * branch            main       -> FETCH_HEAD
+Already up to date.
+Cloning into '/tmp/wiki-update-auto'...
+[2026-04-17 18:16] Systemdaten: Unraid 7.2.4 | Array: STARTED | Container: 30 laufend, 3 gestoppt
+[2026-04-17 18:16] Disks: Disk1 2.1T/3.7T (58%) | Disk2 1.8T/3.7T (50%) | Cache 205G/466G (44%)
+[2026-04-17 18:16] Wiki-Dateien aktualisiert
+[2026-04-17 18:16] Wiki: Keine Änderungen
