@@ -1,108 +1,117 @@
 #!/bin/bash
-# Wöchentliches Dokumentations-Update via Claude Code
-# Wird durch Unraid User Scripts ausgeführt
+# Wöchentliches Dokumentations-Update
+# Wird durch Unraid User Scripts jeden Montag um 03:00 UTC ausgeführt
 
 set -e
 DOCS_DIR="/root/unraid-nas-docs"
 LOG="$DOCS_DIR/scripts/update.log"
 
-echo "[$(date '+%Y-%m-%d %H:%M')] === Update gestartet ===" >> "$LOG"
+log() { echo "[$(date '+%Y-%m-%d %H:%M')] $1" >> "$LOG"; }
 
-# GitHub-Token laden
+log "=== Update gestartet ==="
+
 source "$DOCS_DIR/.env"
 cd "$DOCS_DIR"
-
-# Remote auf aktuellen Stand bringen
 git pull origin main >> "$LOG" 2>&1
 
 # ── Systemdaten sammeln ──────────────────────────────────────────
+DATE=$(date '+%Y-%m-%d')
 UNRAID_VERSION=$(cat /etc/unraid-version | grep version | cut -d'"' -f2)
-HOSTNAME=$(hostname)
 KERNEL=$(uname -r)
 CPU=$(grep "model name" /proc/cpuinfo | head -1 | cut -d: -f2 | xargs)
 RAM_TOTAL=$(free -h | grep Mem | awk '{print $2}')
 RAM_USED=$(free -h | grep Mem | awk '{print $3}')
 UPTIME=$(uptime -p)
 LOAD=$(cat /proc/loadavg | cut -d' ' -f1-3)
-DATE=$(date '+%Y-%m-%d')
-
-DISK_USAGE=$(df -h /mnt/disk1 /mnt/disk2 /mnt/cache 2>/dev/null)
 ARRAY_STATE=$(mdcmd status 2>/dev/null | grep "^mdState=" | cut -d= -f2)
-CONTAINERS=$(docker ps -a --format "{{.Names}}\t{{.Status}}" 2>/dev/null)
-RUNNING=$(docker ps -q 2>/dev/null | wc -l)
-STOPPED=$(docker ps -aq --filter "status=exited" 2>/dev/null | wc -l)
 
-# Snapshot-Datei für Nachvollziehbarkeit speichern
+RUNNING=$(docker ps -q 2>/dev/null | wc -l | tr -d ' ')
+STOPPED=$(docker ps -aq --filter "status=exited" 2>/dev/null | wc -l | tr -d ' ')
+TOTAL=$(docker ps -aq 2>/dev/null | wc -l | tr -d ' ')
+
+# Disk-Belegung
+DISK1_USE=$(df -h /mnt/disk1 2>/dev/null | awk 'NR==2{print $3}')
+DISK1_SIZE=$(df -h /mnt/disk1 2>/dev/null | awk 'NR==2{print $2}')
+DISK1_PCT=$(df /mnt/disk1 2>/dev/null | awk 'NR==2{print $5}' | tr -d '%')
+DISK2_USE=$(df -h /mnt/disk2 2>/dev/null | awk 'NR==2{print $3}')
+DISK2_SIZE=$(df -h /mnt/disk2 2>/dev/null | awk 'NR==2{print $2}')
+DISK2_PCT=$(df /mnt/disk2 2>/dev/null | awk 'NR==2{print $5}' | tr -d '%')
+CACHE_USE=$(df -h /mnt/cache 2>/dev/null | awk 'NR==2{print $3}')
+CACHE_SIZE=$(df -h /mnt/cache 2>/dev/null | awk 'NR==2{print $2}')
+CACHE_PCT=$(df /mnt/cache 2>/dev/null | awk 'NR==2{print $5}' | tr -d '%')
+
+log "Systemdaten: Unraid $UNRAID_VERSION | Array: $ARRAY_STATE | Container: $RUNNING laufend, $STOPPED gestoppt"
+log "Disks: Disk1 $DISK1_USE/$DISK1_SIZE ($DISK1_PCT%) | Disk2 $DISK2_USE/$DISK2_SIZE ($DISK2_PCT%) | Cache $CACHE_USE/$CACHE_SIZE ($CACHE_PCT%)"
+
+# Snapshot speichern
 mkdir -p "$DOCS_DIR/scripts/data"
-cat > "$DOCS_DIR/scripts/data/snapshot.txt" << SNAPSHOT
+cat > "$DOCS_DIR/scripts/data/snapshot.txt" << SNAP
 DATE=$DATE
 UNRAID_VERSION=$UNRAID_VERSION
-HOSTNAME=$HOSTNAME
 KERNEL=$KERNEL
-CPU=$CPU
-RAM_TOTAL=$RAM_TOTAL
-RAM_USED=$RAM_USED
-UPTIME=$UPTIME
-LOAD=$LOAD
 ARRAY_STATE=$ARRAY_STATE
-CONTAINERS_RUNNING=$RUNNING
-CONTAINERS_STOPPED=$STOPPED
+RUNNING=$RUNNING
+STOPPED=$STOPPED
+TOTAL=$TOTAL
+DISK1=$DISK1_USE/$DISK1_SIZE (${DISK1_PCT}%)
+DISK2=$DISK2_USE/$DISK2_SIZE (${DISK2_PCT}%)
+CACHE=$CACHE_USE/$CACHE_SIZE (${CACHE_PCT}%)
+LOAD=$LOAD
+UPTIME=$UPTIME
+SNAP
 
-DISK_USAGE:
-$DISK_USAGE
+# ── Docs aktualisieren ───────────────────────────────────────────
 
-CONTAINERS:
-$CONTAINERS
-SNAPSHOT
+# 1. Datum "Zuletzt aktualisiert" in allen Docs
+find "$DOCS_DIR/docs" -name "*.md" -exec \
+    sed -i "s/Zuletzt aktualisiert: [0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}/Zuletzt aktualisiert: $DATE/g" {} \;
 
-echo "[$(date '+%Y-%m-%d %H:%M')] Systemdaten gesammelt" >> "$LOG"
+# 2. Unraid-Version
+sed -i "s/Unraid [0-9]\+\.[0-9]\+\.[0-9]\+/Unraid $UNRAID_VERSION/g" \
+    "$DOCS_DIR/docs/hardware/overview.md" \
+    "$DOCS_DIR/docs/index.md" 2>/dev/null || true
 
-# ── Claude aktualisiert die Dokumentation ────────────────────────
-PROMPT="Du bist ein Dokumentations-Assistent für ein Unraid NAS namens HOMELAB.
+# 3. Kernel
+sed -i "s|[0-9]\+\.[0-9]\+\.[0-9]\+-Unraid|$KERNEL|g" \
+    "$DOCS_DIR/docs/hardware/overview.md" 2>/dev/null || true
 
-Heute ist: $DATE
-Die Dokumentation liegt in: /root/unraid-nas-docs/docs/
+# 4. Disk-Belegung in hardware/overview.md
+sed -i "s/| Disk 1 | WD WD40EFZX-68AWUN0 | 4 TB | XFS | .* |/| Disk 1 | WD WD40EFZX-68AWUN0 | 4 TB | XFS | $DISK1_USE \/ $DISK1_SIZE (${DISK1_PCT}%) |/" \
+    "$DOCS_DIR/docs/hardware/overview.md" 2>/dev/null || true
+sed -i "s/| Disk 2 | WD WD40EFZX-68AWUN0 | 4 TB | XFS | .* |/| Disk 2 | WD WD40EFZX-68AWUN0 | 4 TB | XFS | $DISK2_USE \/ $DISK2_SIZE (${DISK2_PCT}%) |/" \
+    "$DOCS_DIR/docs/hardware/overview.md" 2>/dev/null || true
+sed -i "s/| Cache | Samsung 970 EVO Plus 500GB (NVMe) | 500 GB | XFS | .* |/| Cache | Samsung 970 EVO Plus 500GB (NVMe) | 500 GB | XFS | $CACHE_USE \/ $CACHE_SIZE (${CACHE_PCT}%) |/" \
+    "$DOCS_DIR/docs/hardware/overview.md" 2>/dev/null || true
 
-Aktuelle Systemdaten:
-- Unraid Version: $UNRAID_VERSION
-- Kernel: $KERNEL
-- Uptime: $UPTIME
-- Load: $LOAD
-- RAM: $RAM_USED von $RAM_TOTAL verwendet
-- Array-Status: $ARRAY_STATE
-- Docker-Container: $RUNNING laufend, $STOPPED gestoppt
+# 5. Container-Anzahl in index.md
+sed -i "s/\*\*Container\*\* | [0-9]* ([0-9]* aktiv)/**Container** | $TOTAL ($RUNNING aktiv)/" \
+    "$DOCS_DIR/docs/index.md" 2>/dev/null || true
 
-Festplatten-Belegung:
-$DISK_USAGE
+# 6. Container-Zusammenfassung in docker-containers.md
+sed -i "s/\*\*Gesamt:\*\* [0-9]* Container ([0-9]* laufend, [0-9]* gestoppt)/**Gesamt:** $TOTAL Container ($RUNNING laufend, $STOPPED gestoppt)/" \
+    "$DOCS_DIR/docs/services/docker-containers.md" 2>/dev/null || true
 
-Docker-Container-Status:
-$CONTAINERS
+# 7. Disk-Belegung in backup.md
+sed -i "s/| Disk 1 | WD WD40EFZX-68AWUN0 | 4 TB | [0-9]*% |/| Disk 1 | WD WD40EFZX-68AWUN0 | 4 TB | ${DISK1_PCT}% |/" \
+    "$DOCS_DIR/docs/maintenance/backup.md" 2>/dev/null || true
+sed -i "s/| Disk 2 | WD WD40EFZX-68AWUN0 | 4 TB | [0-9]*% |/| Disk 2 | WD WD40EFZX-68AWUN0 | 4 TB | ${DISK2_PCT}% |/" \
+    "$DOCS_DIR/docs/maintenance/backup.md" 2>/dev/null || true
+sed -i "s/| Cache | Samsung 970 EVO Plus | 500 GB | [0-9]*% |/| Cache | Samsung 970 EVO Plus | 500 GB | ${CACHE_PCT}% |/" \
+    "$DOCS_DIR/docs/maintenance/backup.md" 2>/dev/null || true
 
-Aufgaben:
-1. Aktualisiere das Datum 'Zuletzt aktualisiert' auf $DATE in allen docs/-Dateien
-2. Aktualisiere die Disk-Belegungszahlen in docs/hardware/overview.md und docs/maintenance/backup.md
-3. Aktualisiere die Container-Anzahl (laufend/gestoppt) in docs/services/docker-containers.md und docs/index.md
-4. Falls sich Container-Status geändert hat (✅/❌), aktualisiere docs/services/docker-containers.md
-5. Prüfe ob Unraid-Version in docs/hardware/overview.md korrekt ist ($UNRAID_VERSION)
-6. Mache NUR Änderungen die durch die obigen Daten begründet sind. Keine inhaltlichen Umstrukturierungen.
+log "Docs aktualisiert"
 
-Führe alle notwendigen Datei-Änderungen durch und antworte am Ende mit einer kurzen Zusammenfassung was du geändert hast."
-
-echo "[$(date '+%Y-%m-%d %H:%M')] Claude wird aufgerufen..." >> "$LOG"
-CHANGES=$(echo "$PROMPT" | claude --print 2>> "$LOG")
-echo "[$(date '+%Y-%m-%d %H:%M')] Claude fertig: $CHANGES" >> "$LOG"
-
-# ── Git commit & push ─────────────────────────────────────────────
+# ── Git commit & push ────────────────────────────────────────────
 git config user.email "patrick@gschwend.one"
 git config user.name "Claude AI (Auto-Update)"
 
 if git diff --quiet && git diff --cached --quiet; then
-    echo "[$(date '+%Y-%m-%d %H:%M')] Keine Änderungen – kein Commit nötig" >> "$LOG"
+    log "Keine Änderungen – kein Commit nötig"
 else
     git add -A
-    git commit -m "Auto-Update $DATE: Systemdaten aktualisiert"
+    git commit -m "Auto-Update $DATE: Disk ${DISK1_PCT}%/${DISK2_PCT}%/${CACHE_PCT}% | Container $RUNNING/$TOTAL laufend | Unraid $UNRAID_VERSION"
     git push origin main >> "$LOG" 2>&1
-    echo "[$(date '+%Y-%m-%d %H:%M')] Gepusht zu GitHub" >> "$LOG"
+    log "Gepusht zu GitHub ✓"
 fi
 
-echo "[$(date '+%Y-%m-%d %H:%M')] === Update abgeschlossen ===" >> "$LOG"
+log "=== Update abgeschlossen ==="

@@ -17,7 +17,7 @@
 | **RAM** | 32 GB |
 | **Array** | 2× WD 4TB + Seagate 12TB Parity |
 | **Cache** | Samsung 970 EVO Plus 500GB NVMe |
-| **Container** | 33 (29 aktiv) |
+| **Container** | 33 (30 aktiv) |
 
 ## Navigation
 

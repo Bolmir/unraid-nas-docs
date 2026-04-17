@@ -20,14 +20,14 @@
 | Slot | Modell | Kapazität | Dateisystem | Belegung |
 |------|--------|-----------|-------------|---------|
 | Parity | Seagate ST12000VN0008 | 12 TB | — | Parität |
-| Disk 1 | WD WD40EFZX-68AWUN0 | 4 TB | XFS | 2.1 TB / 3.7 TB (58%) |
-| Disk 2 | WD WD40EFZX-68AWUN0 | 4 TB | XFS | 1.8 TB / 3.7 TB (50%) |
+| Disk 1 | WD WD40EFZX-68AWUN0 | 4 TB | XFS | 2.1T / 3.7T (58%) |
+| Disk 2 | WD WD40EFZX-68AWUN0 | 4 TB | XFS | 1.8T / 3.7T (50%) |
 
 ### Cache
 
 | Gerät | Modell | Kapazität | Dateisystem | Belegung |
 |-------|--------|-----------|-------------|---------|
-| Cache | Samsung 970 EVO Plus 500GB (NVMe) | 500 GB | XFS | 205 GB / 466 GB (44%) |
+| Cache | Samsung 970 EVO Plus 500GB (NVMe) | 500 GB | XFS | 205G / 466G (44%) |
 
 ### Array-Status
 
