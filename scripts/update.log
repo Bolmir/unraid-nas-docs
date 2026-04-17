@@ -32,3 +32,7 @@ Already up to date.
 [2026-04-17 09:12] Systemdaten: Unraid 7.2.4 | Array: STARTED | Container: 30 laufend, 3 gestoppt
 [2026-04-17 09:12] Disks: Disk1 2.1T/3.7T (58%) | Disk2 1.8T/3.7T (50%) | Cache 205G/466G (44%)
 [2026-04-17 09:12] Docs aktualisiert
+To https://github.com/Bolmir/unraid-nas-docs.git
+   dcafa01..f3c2e3c  main -> main
+[2026-04-17 09:12] Gepusht zu GitHub ✓
+[2026-04-17 09:12] === Update abgeschlossen ===

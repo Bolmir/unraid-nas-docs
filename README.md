@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/case-model.png" alt="HOMELAB NAS" width="180"/>
+  <img src="https://raw.githubusercontent.com/Bolmir/unraid-nas-docs/main/assets/case-model.png" alt="HOMELAB NAS" width="180"/>
 </p>
 
 <h1 align="center">HOMELAB</h1>
@@ -18,17 +18,21 @@
 
 ---
 
-## Wiki
+## 📖 Wiki
 
-📖 **[→ Zur vollständigen Dokumentation](https://bolmir.github.io/unraid-nas-docs/)**
+**[→ Zur vollständigen Dokumentation](../../wiki)**
 
-| Bereich | Beschreibung |
-|---------|-------------|
-| [Hardware](https://bolmir.github.io/unraid-nas-docs/hardware/overview/) | CPU, RAM, Festplatten, Netzwerk |
-| [Docker Container](https://bolmir.github.io/unraid-nas-docs/services/docker-containers/) | Alle laufenden Dienste |
-| [Unraid Einrichtung](https://bolmir.github.io/unraid-nas-docs/setup/unraid/) | Schritt-für-Schritt Neuinstallation |
-| [Disaster Recovery](https://bolmir.github.io/unraid-nas-docs/disaster-recovery/plan/) | ⚠️ Notfallplan |
-| [Passwörter](https://bolmir.github.io/unraid-nas-docs/security/passwords/) | Bitwarden-Übersicht |
+| Seite | Beschreibung |
+|-------|-------------|
+| [Hardware](../../wiki/Hardware) | CPU, RAM, Festplatten, Netzwerk |
+| [Docker Container](../../wiki/Docker-Container) | Alle laufenden Dienste |
+| [Shares & Plugins](../../wiki/Shares-und-Plugins) | Freigaben & Plugins |
+| [Netzwerk](../../wiki/Netzwerk) | IPs, Ports, Reverse Proxy |
+| [Unraid Setup](../../wiki/Unraid-Setup) | Schritt-für-Schritt Neuinstallation |
+| [Docker Setup](../../wiki/Docker-Setup) | Alle Container einrichten |
+| [Passwörter](../../wiki/Passwoerter) | Bitwarden-Übersicht |
+| [Disaster Recovery](../../wiki/Disaster-Recovery) | ⚠️ Notfallplan |
+| [Backup & Wartung](../../wiki/Backup-und-Wartung) | Backup-Strategie |
 
 ## Hardware
 
@@ -57,5 +61,5 @@ Gaming       Valheim · TeamSpeak 6
 ---
 
 <p align="center">
-  <sub>Dokumentation wird automatisch von Claude AI aktualisiert · <a href="https://bolmir.github.io/unraid-nas-docs/">bolmir.github.io/unraid-nas-docs</a></sub>
+  <sub>Dokumentation wird automatisch von Claude AI aktualisiert (jeden Montag 03:00 UTC)</sub>
 </p>
