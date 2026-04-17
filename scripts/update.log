@@ -36,3 +36,40 @@ To https://github.com/Bolmir/unraid-nas-docs.git
    dcafa01..f3c2e3c  main -> main
 [2026-04-17 09:12] Gepusht zu GitHub ✓
 [2026-04-17 09:12] === Update abgeschlossen ===
+[2026-04-17 18:16] === Update gestartet ===
+From https://github.com/Bolmir/unraid-nas-docs
+ * branch            main       -> FETCH_HEAD
+Already up to date.
+Cloning into '/tmp/wiki-update-auto'...
+[2026-04-17 18:16] Systemdaten: Unraid 7.2.4 | Array: STARTED | Container: 30 laufend, 3 gestoppt
+[2026-04-17 18:16] Disks: Disk1 2.1T/3.7T (58%) | Disk2 1.8T/3.7T (50%) | Cache 205G/466G (44%)
+[2026-04-17 18:16] Wiki-Dateien aktualisiert
+To https://github.com/Bolmir/unraid-nas-docs.wiki.git
+   28540ca..f7760c1  master -> master
+[2026-04-17 18:16] Wiki gepusht zu GitHub ✓
+remote: error: GH013: Repository rule violations found for refs/heads/main.        
+remote: 
+remote: - GITHUB PUSH PROTECTION        
+remote:   —————————————————————————————————————————        
+remote:     Resolve the following violations before pushing again        
+remote: 
+remote:     - Push cannot contain secrets        
+remote: 
+remote:             
+remote:      (?) Learn how to resolve a blocked push        
+remote:      https://docs.github.com/code-security/secret-scanning/working-with-secret-scanning-and-push-protection/working-with-push-protection-from-the-command-line#resolving-a-blocked-push        
+remote:             
+remote:             
+remote:       —— GitHub Personal Access Token ——————————————————————        
+remote:        locations:        
+remote:          - commit: ceb7649011ef60165ce9efb06148bdaece9a2d87        
+remote:            path: scripts/update-docs.sh:20        
+remote:             
+remote:        (?) To push, remove secret from commit(s) or follow this URL to allow the secret.        
+remote:        https://github.com/Bolmir/unraid-nas-docs/security/secret-scanning/unblock-secret/3CUaOajGzmYCkA3uxN03sE6fyJe        
+remote:             
+remote: 
+remote: 
+To https://github.com/Bolmir/unraid-nas-docs.git
+ ! [remote rejected] main -> main (push declined due to repository rule violations)
+error: failed to push some refs to 'https://github.com/Bolmir/unraid-nas-docs.git'

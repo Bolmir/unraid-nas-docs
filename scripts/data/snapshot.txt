@@ -8,5 +8,5 @@ TOTAL=33
 DISK1=2.1T/3.7T (58%)
 DISK2=1.8T/3.7T (50%)
 CACHE=205G/466G (44%)
-LOAD=2.38 3.72 4.78
-UPTIME=up 21 hours, 21 minutes
+LOAD=0.58 0.41 0.35
+UPTIME=up 1 day, 6 hours, 25 minutes
