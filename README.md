@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Bolmir/unraid-nas-docs/main/assets/case-model.png" alt="HOMELAB NAS" width="180"/>
+  <img src="assets/case-model.png" alt="HOMELAB NAS" width="180"/>
 </p>
 
 <h1 align="center">HOMELAB</h1>
