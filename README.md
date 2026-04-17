@@ -12,6 +12,7 @@
   <img src="https://img.shields.io/badge/Unraid-7.2.4-orange?style=flat-square&logo=unraid" alt="Unraid"/>
   <img src="https://img.shields.io/badge/Intel-i3--12100-blue?style=flat-square&logo=intel" alt="CPU"/>
   <img src="https://img.shields.io/badge/RAM-32GB-green?style=flat-square" alt="RAM"/>
+  <img src="https://img.shields.io/badge/GPU-RTX A2000 12GB-76B900?style=flat-square&logo=nvidia" alt="GPU"/>
   <img src="https://img.shields.io/badge/Array-20TB-lightgrey?style=flat-square" alt="Storage"/>
   <img src="https://img.shields.io/badge/Docker-33 Container-2496ED?style=flat-square&logo=docker" alt="Docker"/>
 </p>
@@ -39,6 +40,7 @@
 | Komponente | Details |
 |-----------|---------|
 | **CPU** | Intel Core i3-12100 (12th Gen) |
+| **GPU** | NVIDIA RTX A2000 12GB |
 | **RAM** | 32 GB DDR4 |
 | **Parity** | Seagate 12TB |
 | **Disk 1/2** | 2× WD Red 4TB |
