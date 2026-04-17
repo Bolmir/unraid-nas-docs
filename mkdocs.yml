@@ -1,0 +1,42 @@
+site_name: HOMELAB NAS Dokumentation
+site_description: Automatisch gepflegte Dokumentation des Unraid NAS
+site_url: https://bolmir.github.io/unraid-nas-docs
+repo_url: https://github.com/Bolmir/unraid-nas-docs
+repo_name: Bolmir/unraid-nas-docs
+
+theme:
+  name: material
+  language: de
+  palette:
+    - scheme: slate
+      primary: orange
+      accent: orange
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - content.tables
+
+nav:
+  - Home: index.md
+  - Hardware:
+    - Übersicht: hardware/overview.md
+  - Software:
+    - Plugins: software/plugins.md
+    - Shares: software/shares.md
+  - Dienste:
+    - Docker Container: services/docker-containers.md
+  - Netzwerk:
+    - Übersicht: network/overview.md
+  - Wartung:
+    - Backup: maintenance/backup.md
+
+plugins:
+  - search
+
+markdown_extensions:
+  - tables
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
