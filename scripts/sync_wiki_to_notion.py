@@ -277,17 +277,14 @@ def resolve_link_url(url: str) -> str | None:
         return url
     if url.startswith("#"):
         return None
-    # Mit "/" beginnend = absoluter GitHub-Pfad (z.B. /Bolmir/repo/blob/...)
     if url.startswith("/"):
         return f"https://github.com{url}"
-    # Mit "./" oder "../" beginnend = relativer Pfad zur README-Datei
     if url.startswith("."):
         cleaned = re.sub(r"^(\.{1,2}/)+", "", url)
         if cleaned == "wiki" or cleaned.startswith("wiki/"):
             wiki_path = cleaned[len("wiki"):].lstrip("/")
             return WIKI_BASE_URL if not wiki_path else f"{WIKI_BASE_URL}/{wiki_path}"
         return f"https://github.com/Bolmir/unraid-nas-docs/blob/main/{cleaned}"
-    # Reiner Name ohne Pfad-Slash: vermutlich Wiki-Seite
     return f"{WIKI_BASE_URL}/{url}"
 
 
@@ -320,7 +317,6 @@ def parse_inline(text: str) -> list[dict]:
         )
 
         if bold:
-            # Rekursiv parsen, damit verschachtelte Links/Code erkannt werden
             for child in parse_inline(bold):
                 annotations = child.get("annotations", {}) or {}
                 annotations["bold"] = True
@@ -537,6 +533,9 @@ def group_images_into_columns(blocks: list[dict]) -> list[dict]:
     """Fasst aufeinanderfolgende image-Blocks in Notion column_list-Blocks
     zusammen (→ Bilder nebeneinander statt untereinander).
 
+    width_ratio erzwingt gleiche Spaltenbreiten, damit Badges trotz
+    unterschiedlicher Original-Breite gleich gross gerendert werden.
+
     Sonderfall: Ein einzelnes Bild wird mit einer leeren Dummy-Spalte daneben
     gepackt, damit es nur halbe Breite einnimmt."""
     result = []
@@ -551,10 +550,16 @@ def group_images_into_columns(blocks: list[dict]) -> list[dict]:
                 j += 1
 
             if len(image_group) >= 2:
+                # Mehrere Bilder → alle nebeneinander in Columns packen.
+                # width_ratio erzwingt gleiche Spaltenbreite → Badges gleich gross.
+                ratio = 1.0 / len(image_group)
                 columns = [
                     {
                         "type": "column",
-                        "column": {"children": [img]},
+                        "column": {
+                            "width_ratio": ratio,
+                            "children": [img],
+                        },
                     }
                     for img in image_group
                 ]
@@ -563,23 +568,29 @@ def group_images_into_columns(blocks: list[dict]) -> list[dict]:
                     "column_list": {"children": columns},
                 })
             else:
+                # Einzelnes Bild → mit leerer Dummy-Spalte daneben
+                # (damit es nicht volle Breite einnimmt).
                 result.append({
                     "type": "column_list",
                     "column_list": {
                         "children": [
                             {
                                 "type": "column",
-                                "column": {"children": [image_group[0]]},
+                                "column": {
+                                    "width_ratio": 0.5,
+                                    "children": [image_group[0]],
+                                },
                             },
                             {
                                 "type": "column",
                                 "column": {
+                                    "width_ratio": 0.5,
                                     "children": [
                                         {
                                             "type": "paragraph",
                                             "paragraph": {"rich_text": []},
                                         }
-                                    ]
+                                    ],
                                 },
                             },
                         ],
