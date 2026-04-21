@@ -270,16 +270,31 @@ def strip_html_tags(text: str) -> str:
 
 
 def resolve_link_url(url: str) -> str | None:
-    """Stellt sicher, dass eine Link-URL absolut + Notion-kompatibel ist."""
+    """Stellt sicher, dass eine Link-URL absolut + Notion-kompatibel ist.
+    Relative GitHub-Pfade werden zu github.com-URLs.
+    Gibt None zurück, wenn die URL nicht rettbar ist (Link wird dann als Text
+    gerendert)."""
     url = url.strip()
     if not url:
         return None
     if url.startswith(_VALID_LINK_SCHEMES):
         return url
     if url.startswith("#"):
+        # Anker — in Notion nicht auflösbar, daher droppen
         return None
+    # Mit "/" beginnend = absoluter GitHub-Pfad (z.B. /Bolmir/repo/blob/...)
     if url.startswith("/"):
         return f"https://github.com{url}"
+    # Mit "./" oder "../" beginnend = relativer Pfad zur README-Datei im Repo-Root
+    if url.startswith("."):
+        cleaned = re.sub(r"^(\.{1,2}/)+", "", url)
+        # Spezialfall: wiki oder wiki/... → GitHub-Wiki-URL (nicht /blob/main/wiki)
+        if cleaned == "wiki" or cleaned.startswith("wiki/"):
+            wiki_path = cleaned[len("wiki"):].lstrip("/")
+            return WIKI_BASE_URL if not wiki_path else f"{WIKI_BASE_URL}/{wiki_path}"
+        # Sonst: Repo-Pfad
+        return f"https://github.com/Bolmir/unraid-nas-docs/blob/main/{cleaned}"
+    # Reiner Name ohne Pfad-Slash: vermutlich Wiki-Seite
     return f"{WIKI_BASE_URL}/{url}"
 
 
@@ -385,9 +400,7 @@ def parse_table(lines: list[str]) -> dict | None:
 
 def markdown_to_blocks(md: str) -> list[dict]:
     """Konvertiert Markdown in eine Liste von Notion-Block-Dicts."""
-    # Wiki-Links vorab zu normalen Markdown-Links umschreiben
     md = convert_wiki_links(md)
-    # HTML-Tags (ausser <img>) rausstrippen
     md = strip_html_tags(md)
 
     blocks: list[dict] = []
