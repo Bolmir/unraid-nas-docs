@@ -35,9 +35,7 @@ NOTION_VERSION = "2022-06-28"
 NOTION_TOKEN = os.environ.get("NOTION_TOKEN")
 PARENT_PAGE_ID = os.environ.get("NOTION_PARENT_PAGE_ID")
 WIKI_DIR = Path(os.environ.get("WIKI_DIR", "./wiki"))
-# Haupt-Repo (für README.md und /assets Bilder)
 REPO_DIR = Path(os.environ.get("REPO_DIR", "."))
-# Raw-URL-Basis für Bilder/Assets (absolute URLs für Notion)
 REPO_RAW_BASE = os.environ.get(
     "REPO_RAW_BASE",
     "https://raw.githubusercontent.com/Bolmir/unraid-nas-docs/main"
@@ -54,10 +52,8 @@ HEADERS = {
     "Content-Type": "application/json",
 }
 
-# Notion limitiert rich_text auf 2000 Zeichen pro Block.
 MAX_TEXT_LENGTH = 1900
 
-# Emoji-Map für Unterseiten (Key = normalisierter Seitentitel)
 PAGE_EMOJI_MAP = {
     "Hardware": "🖥️",
     "Docker Container": "🐳",
@@ -94,7 +90,6 @@ def notion_request(method: str, path: str, **kwargs) -> dict:
 
 
 def get_child_pages(parent_id: str) -> list[dict]:
-    """Liste alle direkten Child-Pages einer Seite."""
     children = []
     cursor = None
     while True:
@@ -112,15 +107,11 @@ def get_child_pages(parent_id: str) -> list[dict]:
 
 
 def archive_page(page_id: str) -> None:
-    """Seite löschen (= archivieren in Notion)."""
-    notion_request("PATCH", f"/pages/{page_id}",
-                   json={"archived": True})
+    notion_request("PATCH", f"/pages/{page_id}", json={"archived": True})
 
 
 def create_page(parent_id: str, title: str, blocks: list[dict],
                 icon: str | None = None) -> str:
-    """Neue Unterseite mit Inhalt anlegen. Returns page_id."""
-    # Notion erlaubt max. 100 Blocks pro API-Call. Rest hängen wir nach.
     first_batch = blocks[:100]
     rest = blocks[100:]
 
@@ -136,7 +127,6 @@ def create_page(parent_id: str, title: str, blocks: list[dict],
     result = notion_request("POST", "/pages", json=body)
     page_id = result["id"]
 
-    # Rest-Blocks in 100er-Chunks anhängen
     for i in range(0, len(rest), 100):
         chunk = rest[i:i + 100]
         notion_request("PATCH", f"/blocks/{page_id}/children",
@@ -146,8 +136,6 @@ def create_page(parent_id: str, title: str, blocks: list[dict],
 
 
 def replace_page_content(page_id: str, blocks: list[dict]) -> None:
-    """Ersetze den Inhalt einer bestehenden Seite."""
-    # Alle existierenden Kinder (die KEINE Child-Pages sind) löschen
     cursor = None
     while True:
         params = {"page_size": 100}
@@ -164,7 +152,6 @@ def replace_page_content(page_id: str, blocks: list[dict]) -> None:
             break
         cursor = data.get("next_cursor")
 
-    # Neue Blöcke in 100er-Chunks anhängen
     for i in range(0, len(blocks), 100):
         chunk = blocks[i:i + 100]
         notion_request("PATCH", f"/blocks/{page_id}/children",
@@ -174,13 +161,12 @@ def replace_page_content(page_id: str, blocks: list[dict]) -> None:
 # --- Markdown -> Notion Blocks ---
 
 INLINE_PATTERN = re.compile(
-    r"(\*\*([^*]+)\*\*|"   # bold
-    r"\*([^*]+)\*|"         # italic
-    r"`([^`]+)`|"           # inline code
-    r"\[([^\]]+)\]\(([^)]+)\))"  # link
+    r"(\*\*([^*]+)\*\*|"
+    r"\*([^*]+)\*|"
+    r"`([^`]+)`|"
+    r"\[([^\]]+)\]\(([^)]+)\))"
 )
 
-# GitHub Wiki-Link: [[Seitenname]] oder [[Seitenname|Anzeigetext]]
 WIKI_LINK_PATTERN = re.compile(r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]")
 
 WIKI_BASE_URL = os.environ.get(
@@ -190,12 +176,10 @@ WIKI_BASE_URL = os.environ.get(
 
 
 def _looks_like_page_name(s: str) -> bool:
-    """Heuristik: Enthält Bindestrich oder beginnt gross → vermutlich Seitenname."""
     return "-" in s or (s[:1].isupper() and " " not in s)
 
 
 def convert_wiki_links(text: str) -> str:
-    """Konvertiert [[Page]] und [[A|B]] zu normalen Markdown-Links."""
     def replace(m: re.Match) -> str:
         first, second = m.group(1), m.group(2)
         if second is None:
@@ -215,19 +199,13 @@ def convert_wiki_links(text: str) -> str:
 
 # --- Bild-Handling ---
 
-# Markdown-Bild (eigene Zeile): ![alt](url)
 IMAGE_LINE_PATTERN = re.compile(r"^!\[([^\]]*)\]\(([^)]+)\)\s*$")
-# Markdown-Bild in Markdown-Link: [![alt](img_url)](link_url)
 IMAGE_IN_LINK_PATTERN = re.compile(r"^\[!\[([^\]]*)\]\(([^)]+)\)\]\(([^)]+)\)\s*$")
-# HTML-img-Tag
 HTML_IMG_PATTERN = re.compile(r'<img[^>]*?src=["\']([^"\']+)["\'][^>]*?>', re.IGNORECASE)
 
 
 def resolve_asset_url(url: str) -> str:
-    """Relative Pfade zu absoluten Raw-GitHub-URLs.
-    camo-Proxies werden auf die Original-URL zurückgebogen (dekodiert)."""
     if url.startswith("http://") or url.startswith("https://"):
-        # camo-Proxy: /<sha>/<hex-encoded-original-url>
         camo_match = re.match(
             r"https://camo\.githubusercontent\.com/[a-f0-9]+/([a-f0-9]+)",
             url,
@@ -241,13 +219,11 @@ def resolve_asset_url(url: str) -> str:
             except (ValueError, UnicodeDecodeError):
                 pass
         return url
-    # Relativer Pfad — auf Raw-URL mappen
     clean = url.lstrip("./").lstrip("/")
     return f"{REPO_RAW_BASE}/{clean}"
 
 
 def parse_image_line(line: str) -> dict | None:
-    """Versucht, eine Zeile als Bild-Block zu parsen."""
     stripped = line.strip()
 
     m = IMAGE_IN_LINK_PATTERN.match(stripped)
@@ -266,7 +242,6 @@ def parse_image_line(line: str) -> dict | None:
 
 
 def _make_image_block(url: str, alt: str) -> dict:
-    """Notion image block aus URL."""
     block = {
         "type": "image",
         "image": {
@@ -279,27 +254,32 @@ def _make_image_block(url: str, alt: str) -> dict:
     return block
 
 
-# Erlaubte URL-Schemes für Notion-Links
+# --- HTML & Links ---
+
 _VALID_LINK_SCHEMES = ("http://", "https://", "mailto:", "tel:", "ftp://")
+
+HTML_TAG_PATTERN = re.compile(r"<(?!img\b)[^>]+>")
+
+
+def strip_html_tags(text: str) -> str:
+    """Entfernt HTML-Tags aus Text, ersetzt <br> durch Leerzeichen.
+    <img>-Tags werden NICHT gestrippt — die behandelt der Bild-Parser."""
+    text = re.sub(r"<br\s*/?>", " ", text, flags=re.IGNORECASE)
+    text = HTML_TAG_PATTERN.sub("", text)
+    return text
 
 
 def resolve_link_url(url: str) -> str | None:
-    """Stellt sicher, dass eine Link-URL absolut + Notion-kompatibel ist.
-    Relative GitHub-Pfade werden zu github.com-URLs.
-    Gibt None zurück, wenn die URL nicht rettbar ist (Link wird dann als Text
-    gerendert)."""
+    """Stellt sicher, dass eine Link-URL absolut + Notion-kompatibel ist."""
     url = url.strip()
     if not url:
         return None
     if url.startswith(_VALID_LINK_SCHEMES):
         return url
     if url.startswith("#"):
-        # Anker — in Notion nicht auflösbar, daher droppen
         return None
-    # Relativer Pfad → github.com
     if url.startswith("/"):
         return f"https://github.com{url}"
-    # Sonst: vermutlich relativer Pfad wie "Disaster-Recovery" oder "foo.md"
     return f"{WIKI_BASE_URL}/{url}"
 
 
@@ -310,7 +290,6 @@ def truncate(text: str) -> str:
 
 
 def parse_inline(text: str) -> list[dict]:
-    """Inline-Markdown zu Notion rich_text Array."""
     text = text.strip()
     if not text:
         return [{"type": "text", "text": {"content": ""}}]
@@ -356,7 +335,6 @@ def parse_inline(text: str) -> list[dict]:
                              "link": {"url": safe_url}},
                 })
             else:
-                # Ungültige URL → als Plain-Text rendern, damit der Block nicht bricht
                 result.append({
                     "type": "text",
                     "text": {"content": truncate(link_text)},
@@ -373,7 +351,6 @@ def parse_inline(text: str) -> list[dict]:
 
 
 def parse_table(lines: list[str]) -> dict | None:
-    """Markdown-Tabelle -> Notion table block."""
     if len(lines) < 2:
         return None
 
@@ -410,6 +387,8 @@ def markdown_to_blocks(md: str) -> list[dict]:
     """Konvertiert Markdown in eine Liste von Notion-Block-Dicts."""
     # Wiki-Links vorab zu normalen Markdown-Links umschreiben
     md = convert_wiki_links(md)
+    # HTML-Tags (ausser <img>) rausstrippen
+    md = strip_html_tags(md)
 
     blocks: list[dict] = []
     lines = md.split("\n")
@@ -419,25 +398,21 @@ def markdown_to_blocks(md: str) -> list[dict]:
         line = lines[i]
         stripped = line.strip()
 
-        # Leerzeile
         if not stripped:
             i += 1
             continue
 
-        # Horizontal rule
         if re.match(r"^-{3,}$|^\*{3,}$|^_{3,}$", stripped):
             blocks.append({"type": "divider", "divider": {}})
             i += 1
             continue
 
-        # Bild (Markdown ![alt](url), [![alt](img)](link), oder <img>)
         image_block = parse_image_line(stripped)
         if image_block:
             blocks.append(image_block)
             i += 1
             continue
 
-        # Code block
         if stripped.startswith("```"):
             lang = stripped[3:].strip() or "plain text"
             code_lines = []
@@ -468,7 +443,6 @@ def markdown_to_blocks(md: str) -> list[dict]:
             })
             continue
 
-        # Heading
         heading_match = re.match(r"^(#{1,3})\s+(.+)$", stripped)
         if heading_match:
             level = len(heading_match.group(1))
@@ -480,7 +454,6 @@ def markdown_to_blocks(md: str) -> list[dict]:
             i += 1
             continue
 
-        # Blockquote
         if stripped.startswith("> "):
             quote_lines = []
             while i < len(lines) and lines[i].strip().startswith(">"):
@@ -492,7 +465,6 @@ def markdown_to_blocks(md: str) -> list[dict]:
             })
             continue
 
-        # Task-List (- [ ] / - [x])
         task_match = re.match(r"^[-*+]\s+\[([ xX])\]\s+(.+)$", stripped)
         if task_match:
             checked = task_match.group(1).lower() == "x"
@@ -507,7 +479,6 @@ def markdown_to_blocks(md: str) -> list[dict]:
             i += 1
             continue
 
-        # Bulleted list
         if re.match(r"^[-*+]\s+", stripped):
             text = re.sub(r"^[-*+]\s+", "", stripped)
             blocks.append({
@@ -517,7 +488,6 @@ def markdown_to_blocks(md: str) -> list[dict]:
             i += 1
             continue
 
-        # Numbered list
         if re.match(r"^\d+\.\s+", stripped):
             text = re.sub(r"^\d+\.\s+", "", stripped)
             blocks.append({
@@ -527,7 +497,6 @@ def markdown_to_blocks(md: str) -> list[dict]:
             i += 1
             continue
 
-        # Table
         if "|" in stripped and stripped.count("|") >= 2:
             if i + 1 < len(lines) and re.match(r"^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?\s*$",
                                                 lines[i + 1].strip()):
@@ -542,20 +511,80 @@ def markdown_to_blocks(md: str) -> list[dict]:
                     i = j
                     continue
 
-        # Default: Paragraph
         blocks.append({
             "type": "paragraph",
             "paragraph": {"rich_text": parse_inline(stripped)},
         })
         i += 1
 
+    # Post-Processing: Bilder in Column-Layouts gruppieren
+    blocks = group_images_into_columns(blocks)
+
     return blocks
+
+
+def group_images_into_columns(blocks: list[dict]) -> list[dict]:
+    """Fasst aufeinanderfolgende image-Blocks in Notion column_list-Blocks
+    zusammen (→ Bilder nebeneinander statt untereinander).
+
+    Sonderfall: Ein einzelnes Bild wird mit einer leeren Dummy-Spalte daneben
+    gepackt, damit es nur halbe Breite einnimmt."""
+    result = []
+    i = 0
+    while i < len(blocks):
+        block = blocks[i]
+        if block.get("type") == "image":
+            image_group = [block]
+            j = i + 1
+            while j < len(blocks) and blocks[j].get("type") == "image":
+                image_group.append(blocks[j])
+                j += 1
+
+            if len(image_group) >= 2:
+                columns = [
+                    {
+                        "type": "column",
+                        "column": {"children": [img]},
+                    }
+                    for img in image_group
+                ]
+                result.append({
+                    "type": "column_list",
+                    "column_list": {"children": columns},
+                })
+            else:
+                result.append({
+                    "type": "column_list",
+                    "column_list": {
+                        "children": [
+                            {
+                                "type": "column",
+                                "column": {"children": [image_group[0]]},
+                            },
+                            {
+                                "type": "column",
+                                "column": {
+                                    "children": [
+                                        {
+                                            "type": "paragraph",
+                                            "paragraph": {"rich_text": []},
+                                        }
+                                    ]
+                                },
+                            },
+                        ],
+                    },
+                })
+            i = j
+        else:
+            result.append(block)
+            i += 1
+    return result
 
 
 # --- Main ---
 
 def slug_to_title(name: str) -> str:
-    """'Docker-Container.md' -> 'Docker Container'"""
     return name.replace(".md", "").replace("-", " ").replace("_", " ")
 
 
@@ -567,7 +596,6 @@ def main() -> int:
     md_files = sorted(WIKI_DIR.glob("*.md"))
     print(f"Gefunden: {len(md_files)} Markdown-Dateien im Wiki")
 
-    # 1. Existierende Child-Pages archivieren (clean slate)
     print("\nArchiviere alte Unterseiten...")
     existing = get_child_pages(PARENT_PAGE_ID)
     for page in existing:
@@ -575,7 +603,6 @@ def main() -> int:
         print(f"  - Archiviere: {title}")
         archive_page(page["id"])
 
-    # 2. README.md (aus Haupt-Repo) als Inhalt der Parent-Seite
     readme_file = REPO_DIR / "README.md"
     if readme_file.exists():
         print(f"\nAktualisiere Parent-Seite mit README.md...")
@@ -590,7 +617,6 @@ def main() -> int:
         print(f"  README.md nicht gefunden unter {readme_file} — "
               f"Parent-Seite bleibt unverändert.")
 
-    # 3. Alle Wiki-.md-Dateien als Unterseiten anlegen
     print(f"\nErstelle Unterseiten...")
     for md_file in md_files:
         if md_file.name.startswith("_"):
