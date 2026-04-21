@@ -279,6 +279,30 @@ def _make_image_block(url: str, alt: str) -> dict:
     return block
 
 
+# Erlaubte URL-Schemes für Notion-Links
+_VALID_LINK_SCHEMES = ("http://", "https://", "mailto:", "tel:", "ftp://")
+
+
+def resolve_link_url(url: str) -> str | None:
+    """Stellt sicher, dass eine Link-URL absolut + Notion-kompatibel ist.
+    Relative GitHub-Pfade werden zu github.com-URLs.
+    Gibt None zurück, wenn die URL nicht rettbar ist (Link wird dann als Text
+    gerendert)."""
+    url = url.strip()
+    if not url:
+        return None
+    if url.startswith(_VALID_LINK_SCHEMES):
+        return url
+    if url.startswith("#"):
+        # Anker — in Notion nicht auflösbar, daher droppen
+        return None
+    # Relativer Pfad → github.com
+    if url.startswith("/"):
+        return f"https://github.com{url}"
+    # Sonst: vermutlich relativer Pfad wie "Disaster-Recovery" oder "foo.md"
+    return f"{WIKI_BASE_URL}/{url}"
+
+
 def truncate(text: str) -> str:
     if len(text) > MAX_TEXT_LENGTH:
         return text[:MAX_TEXT_LENGTH - 3] + "..."
@@ -324,10 +348,19 @@ def parse_inline(text: str) -> list[dict]:
                 "annotations": {"code": True},
             })
         elif link_text:
-            result.append({
-                "type": "text",
-                "text": {"content": truncate(link_text), "link": {"url": link_url}},
-            })
+            safe_url = resolve_link_url(link_url)
+            if safe_url:
+                result.append({
+                    "type": "text",
+                    "text": {"content": truncate(link_text),
+                             "link": {"url": safe_url}},
+                })
+            else:
+                # Ungültige URL → als Plain-Text rendern, damit der Block nicht bricht
+                result.append({
+                    "type": "text",
+                    "text": {"content": truncate(link_text)},
+                })
         pos = match.end()
 
     if pos < len(text):
