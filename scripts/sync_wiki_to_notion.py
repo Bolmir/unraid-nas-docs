@@ -151,11 +151,13 @@ def replace_page_content(page_id: str, blocks: list[dict]) -> None:
 # - Headings (#, ##, ###)
 # - Paragraphs
 # - Bulleted / numbered lists
+# - Task-Lists (- [ ] / - [x])
 # - Code blocks (``` lang)
 # - Blockquotes (>)
 # - Horizontal rules (---)
 # - Tables -> werden als Notion-Tabellen ausgegeben
 # - Inline: bold, italic, code, links
+# - GitHub Wiki-Links: [[Page]] und [[Page|Label]]
 
 INLINE_PATTERN = re.compile(
     r"(\*\*([^*]+)\*\*|"   # bold
@@ -163,6 +165,45 @@ INLINE_PATTERN = re.compile(
     r"`([^`]+)`|"           # inline code
     r"\[([^\]]+)\]\(([^)]+)\))"  # link
 )
+
+# GitHub Wiki-Link: [[Seitenname]] oder [[Seitenname|Anzeigetext]]
+# Heuristik: Das Segment mit Bindestrich/Gross-Kleinschreibung ist vermutlich
+# der Seitenname (z.B. "Disaster-Recovery"), das andere der Anzeigetext.
+WIKI_LINK_PATTERN = re.compile(r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]")
+
+# Basis-URL für Wiki-Links (wird in main() bei Bedarf überschrieben)
+WIKI_BASE_URL = os.environ.get(
+    "WIKI_BASE_URL",
+    "https://github.com/Bolmir/unraid-nas-docs/wiki"
+)
+
+
+def _looks_like_page_name(s: str) -> bool:
+    """Heuristik: Enthält Bindestrich oder beginnt gross → vermutlich Seitenname."""
+    return "-" in s or (s[:1].isupper() and " " not in s)
+
+
+def convert_wiki_links(text: str) -> str:
+    """Konvertiert [[Page]] und [[A|B]] zu normalen Markdown-Links."""
+    def replace(m: re.Match) -> str:
+        first, second = m.group(1), m.group(2)
+        if second is None:
+            # [[Seitenname]]
+            page = first
+            label = first.replace("-", " ")
+        else:
+            # [[A|B]] — welcher ist der Seitenname?
+            if _looks_like_page_name(first) and not _looks_like_page_name(second):
+                page, label = first, second
+            elif _looks_like_page_name(second) and not _looks_like_page_name(first):
+                page, label = second, first
+            else:
+                # Default GitHub-Verhalten: erstes = Seite, zweites = Label
+                page, label = first, second
+        # Seitenname für URL: Leerzeichen werden zu Bindestrichen
+        page_url = page.strip().replace(" ", "-")
+        return f"[{label}]({WIKI_BASE_URL}/{page_url})"
+    return WIKI_LINK_PATTERN.sub(replace, text)
 
 
 def truncate(text: str) -> str:
@@ -264,6 +305,9 @@ def parse_table(lines: list[str]) -> dict | None:
 
 def markdown_to_blocks(md: str) -> list[dict]:
     """Konvertiert Markdown in eine Liste von Notion-Block-Dicts."""
+    # Wiki-Links ([[Page|Label]]) vorab zu normalen Markdown-Links umschreiben
+    md = convert_wiki_links(md)
+
     blocks: list[dict] = []
     lines = md.split("\n")
     i = 0
@@ -337,6 +381,21 @@ def markdown_to_blocks(md: str) -> list[dict]:
                 "type": "quote",
                 "quote": {"rich_text": parse_inline(" ".join(quote_lines))},
             })
+            continue
+
+        # Task-List (GitHub-Style: "- [ ] foo" oder "- [x] foo")
+        task_match = re.match(r"^[-*+]\s+\[([ xX])\]\s+(.+)$", stripped)
+        if task_match:
+            checked = task_match.group(1).lower() == "x"
+            text = task_match.group(2)
+            blocks.append({
+                "type": "to_do",
+                "to_do": {
+                    "rich_text": parse_inline(text),
+                    "checked": checked,
+                },
+            })
+            i += 1
             continue
 
         # Bulleted list
