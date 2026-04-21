@@ -262,37 +262,30 @@ HTML_TAG_PATTERN = re.compile(r"<(?!img\b)[^>]+>")
 
 
 def strip_html_tags(text: str) -> str:
-    """Entfernt HTML-Tags aus Text, ersetzt <br> durch Leerzeichen.
-    <img>-Tags werden NICHT gestrippt — die behandelt der Bild-Parser."""
+    """Entfernt HTML-Tags aus Text, ersetzt <br> durch Leerzeichen."""
     text = re.sub(r"<br\s*/?>", " ", text, flags=re.IGNORECASE)
     text = HTML_TAG_PATTERN.sub("", text)
     return text
 
 
 def resolve_link_url(url: str) -> str | None:
-    """Stellt sicher, dass eine Link-URL absolut + Notion-kompatibel ist.
-    Relative GitHub-Pfade werden zu github.com-URLs.
-    Gibt None zurück, wenn die URL nicht rettbar ist (Link wird dann als Text
-    gerendert)."""
+    """Stellt sicher, dass eine Link-URL absolut + Notion-kompatibel ist."""
     url = url.strip()
     if not url:
         return None
     if url.startswith(_VALID_LINK_SCHEMES):
         return url
     if url.startswith("#"):
-        # Anker — in Notion nicht auflösbar, daher droppen
         return None
     # Mit "/" beginnend = absoluter GitHub-Pfad (z.B. /Bolmir/repo/blob/...)
     if url.startswith("/"):
         return f"https://github.com{url}"
-    # Mit "./" oder "../" beginnend = relativer Pfad zur README-Datei im Repo-Root
+    # Mit "./" oder "../" beginnend = relativer Pfad zur README-Datei
     if url.startswith("."):
         cleaned = re.sub(r"^(\.{1,2}/)+", "", url)
-        # Spezialfall: wiki oder wiki/... → GitHub-Wiki-URL (nicht /blob/main/wiki)
         if cleaned == "wiki" or cleaned.startswith("wiki/"):
             wiki_path = cleaned[len("wiki"):].lstrip("/")
             return WIKI_BASE_URL if not wiki_path else f"{WIKI_BASE_URL}/{wiki_path}"
-        # Sonst: Repo-Pfad
         return f"https://github.com/Bolmir/unraid-nas-docs/blob/main/{cleaned}"
     # Reiner Name ohne Pfad-Slash: vermutlich Wiki-Seite
     return f"{WIKI_BASE_URL}/{url}"
@@ -305,6 +298,9 @@ def truncate(text: str) -> str:
 
 
 def parse_inline(text: str) -> list[dict]:
+    """Inline-Markdown zu Notion rich_text Array.
+    Rekursiv: Bold/Italic parsen ihren Inhalt nochmal, damit verschachtelte
+    Links wie **[text](url)** korrekt erkannt werden."""
     text = text.strip()
     if not text:
         return [{"type": "text", "text": {"content": ""}}]
@@ -324,17 +320,18 @@ def parse_inline(text: str) -> list[dict]:
         )
 
         if bold:
-            result.append({
-                "type": "text",
-                "text": {"content": truncate(bold)},
-                "annotations": {"bold": True},
-            })
+            # Rekursiv parsen, damit verschachtelte Links/Code erkannt werden
+            for child in parse_inline(bold):
+                annotations = child.get("annotations", {}) or {}
+                annotations["bold"] = True
+                child["annotations"] = annotations
+                result.append(child)
         elif italic:
-            result.append({
-                "type": "text",
-                "text": {"content": truncate(italic)},
-                "annotations": {"italic": True},
-            })
+            for child in parse_inline(italic):
+                annotations = child.get("annotations", {}) or {}
+                annotations["italic"] = True
+                child["annotations"] = annotations
+                result.append(child)
         elif code:
             result.append({
                 "type": "text",
