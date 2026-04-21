@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
 """
-Sync GitHub Wiki -> Notion
+Sync GitHub Wiki + README -> Notion
 
-Spiegelt den Inhalt des unraid-nas-docs.wiki Repos auf eine Notion-Seite.
+Spiegelt README (als Hauptseiten-Content) + Wiki (als Unterseiten) nach Notion.
 
 Strategie:
   1. Wiki wird vor dem Aufruf durch die Action bereits geklont (siehe Workflow).
-  2. Home.md wird zum Content der HOMELAB-Parent-Seite.
-  3. Alle anderen .md-Dateien werden Unterseiten.
+  2. README.md wird zum Content der HOMELAB-Parent-Seite.
+  3. Alle Wiki-.md-Dateien werden Unterseiten mit Emojis.
   4. Alte Unterseiten werden vor dem Sync archiviert (Notion = "delete"),
      damit gelöschte/umbenannte Wiki-Seiten nicht als Zombies übrig bleiben.
 
 Environment Variables (Required):
-  NOTION_TOKEN          - Notion Integration Token (secret_...)
+  NOTION_TOKEN          - Notion Integration Token
   NOTION_PARENT_PAGE_ID - ID der HOMELAB-Seite in Notion
   WIKI_DIR              - Pfad zum geklonten Wiki-Repo (default: ./wiki)
+  REPO_DIR              - Pfad zum Haupt-Repo (default: .)
 """
 
 import os
@@ -34,6 +35,13 @@ NOTION_VERSION = "2022-06-28"
 NOTION_TOKEN = os.environ.get("NOTION_TOKEN")
 PARENT_PAGE_ID = os.environ.get("NOTION_PARENT_PAGE_ID")
 WIKI_DIR = Path(os.environ.get("WIKI_DIR", "./wiki"))
+# Haupt-Repo (für README.md und /assets Bilder)
+REPO_DIR = Path(os.environ.get("REPO_DIR", "."))
+# Raw-URL-Basis für Bilder/Assets (absolute URLs für Notion)
+REPO_RAW_BASE = os.environ.get(
+    "REPO_RAW_BASE",
+    "https://raw.githubusercontent.com/Bolmir/unraid-nas-docs/main"
+)
 
 if not NOTION_TOKEN or not PARENT_PAGE_ID:
     print("ERROR: NOTION_TOKEN und NOTION_PARENT_PAGE_ID müssen gesetzt sein.",
@@ -48,6 +56,21 @@ HEADERS = {
 
 # Notion limitiert rich_text auf 2000 Zeichen pro Block.
 MAX_TEXT_LENGTH = 1900
+
+# Emoji-Map für Unterseiten (Key = normalisierter Seitentitel)
+PAGE_EMOJI_MAP = {
+    "Hardware": "🖥️",
+    "Docker Container": "🐳",
+    "Docker Setup": "⚙️",
+    "Netzwerk": "🌐",
+    "Unraid Setup": "🧰",
+    "Shares und Plugins": "📂",
+    "Dienste Konfiguration": "🛠️",
+    "Passwoerter": "🔐",
+    "Passwörter": "🔐",
+    "Disaster Recovery": "🚨",
+    "Backup und Wartung": "💾",
+}
 
 
 # --- Notion API Helpers ---
@@ -94,7 +117,8 @@ def archive_page(page_id: str) -> None:
                    json={"archived": True})
 
 
-def create_page(parent_id: str, title: str, blocks: list[dict]) -> str:
+def create_page(parent_id: str, title: str, blocks: list[dict],
+                icon: str | None = None) -> str:
     """Neue Unterseite mit Inhalt anlegen. Returns page_id."""
     # Notion erlaubt max. 100 Blocks pro API-Call. Rest hängen wir nach.
     first_batch = blocks[:100]
@@ -107,6 +131,8 @@ def create_page(parent_id: str, title: str, blocks: list[dict]) -> str:
         },
         "children": first_batch,
     }
+    if icon:
+        body["icon"] = {"type": "emoji", "emoji": icon}
     result = notion_request("POST", "/pages", json=body)
     page_id = result["id"]
 
@@ -146,18 +172,6 @@ def replace_page_content(page_id: str, blocks: list[dict]) -> None:
 
 
 # --- Markdown -> Notion Blocks ---
-#
-# Bewusst simpel gehalten. Deckt ab was im Wiki vorkommt:
-# - Headings (#, ##, ###)
-# - Paragraphs
-# - Bulleted / numbered lists
-# - Task-Lists (- [ ] / - [x])
-# - Code blocks (``` lang)
-# - Blockquotes (>)
-# - Horizontal rules (---)
-# - Tables -> werden als Notion-Tabellen ausgegeben
-# - Inline: bold, italic, code, links
-# - GitHub Wiki-Links: [[Page]] und [[Page|Label]]
 
 INLINE_PATTERN = re.compile(
     r"(\*\*([^*]+)\*\*|"   # bold
@@ -167,11 +181,8 @@ INLINE_PATTERN = re.compile(
 )
 
 # GitHub Wiki-Link: [[Seitenname]] oder [[Seitenname|Anzeigetext]]
-# Heuristik: Das Segment mit Bindestrich/Gross-Kleinschreibung ist vermutlich
-# der Seitenname (z.B. "Disaster-Recovery"), das andere der Anzeigetext.
 WIKI_LINK_PATTERN = re.compile(r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]")
 
-# Basis-URL für Wiki-Links (wird in main() bei Bedarf überschrieben)
 WIKI_BASE_URL = os.environ.get(
     "WIKI_BASE_URL",
     "https://github.com/Bolmir/unraid-nas-docs/wiki"
@@ -188,22 +199,84 @@ def convert_wiki_links(text: str) -> str:
     def replace(m: re.Match) -> str:
         first, second = m.group(1), m.group(2)
         if second is None:
-            # [[Seitenname]]
             page = first
             label = first.replace("-", " ")
         else:
-            # [[A|B]] — welcher ist der Seitenname?
             if _looks_like_page_name(first) and not _looks_like_page_name(second):
                 page, label = first, second
             elif _looks_like_page_name(second) and not _looks_like_page_name(first):
                 page, label = second, first
             else:
-                # Default GitHub-Verhalten: erstes = Seite, zweites = Label
                 page, label = first, second
-        # Seitenname für URL: Leerzeichen werden zu Bindestrichen
         page_url = page.strip().replace(" ", "-")
         return f"[{label}]({WIKI_BASE_URL}/{page_url})"
     return WIKI_LINK_PATTERN.sub(replace, text)
+
+
+# --- Bild-Handling ---
+
+# Markdown-Bild (eigene Zeile): ![alt](url)
+IMAGE_LINE_PATTERN = re.compile(r"^!\[([^\]]*)\]\(([^)]+)\)\s*$")
+# Markdown-Bild in Markdown-Link: [![alt](img_url)](link_url)
+IMAGE_IN_LINK_PATTERN = re.compile(r"^\[!\[([^\]]*)\]\(([^)]+)\)\]\(([^)]+)\)\s*$")
+# HTML-img-Tag
+HTML_IMG_PATTERN = re.compile(r'<img[^>]*?src=["\']([^"\']+)["\'][^>]*?>', re.IGNORECASE)
+
+
+def resolve_asset_url(url: str) -> str:
+    """Relative Pfade zu absoluten Raw-GitHub-URLs.
+    camo-Proxies werden auf die Original-URL zurückgebogen (dekodiert)."""
+    if url.startswith("http://") or url.startswith("https://"):
+        # camo-Proxy: /<sha>/<hex-encoded-original-url>
+        camo_match = re.match(
+            r"https://camo\.githubusercontent\.com/[a-f0-9]+/([a-f0-9]+)",
+            url,
+        )
+        if camo_match:
+            hex_str = camo_match.group(1)
+            try:
+                decoded = bytes.fromhex(hex_str).decode("utf-8")
+                if decoded.startswith("http"):
+                    return decoded
+            except (ValueError, UnicodeDecodeError):
+                pass
+        return url
+    # Relativer Pfad — auf Raw-URL mappen
+    clean = url.lstrip("./").lstrip("/")
+    return f"{REPO_RAW_BASE}/{clean}"
+
+
+def parse_image_line(line: str) -> dict | None:
+    """Versucht, eine Zeile als Bild-Block zu parsen."""
+    stripped = line.strip()
+
+    m = IMAGE_IN_LINK_PATTERN.match(stripped)
+    if m:
+        return _make_image_block(resolve_asset_url(m.group(2)), m.group(1))
+
+    m = IMAGE_LINE_PATTERN.match(stripped)
+    if m:
+        return _make_image_block(resolve_asset_url(m.group(2)), m.group(1))
+
+    m = HTML_IMG_PATTERN.search(stripped)
+    if m and stripped.startswith("<"):
+        return _make_image_block(resolve_asset_url(m.group(1)), "")
+
+    return None
+
+
+def _make_image_block(url: str, alt: str) -> dict:
+    """Notion image block aus URL."""
+    block = {
+        "type": "image",
+        "image": {
+            "type": "external",
+            "external": {"url": url},
+        },
+    }
+    if alt.strip():
+        block["image"]["caption"] = [{"type": "text", "text": {"content": alt}}]
+    return block
 
 
 def truncate(text: str) -> str:
@@ -268,7 +341,6 @@ def parse_inline(text: str) -> list[dict]:
 
 def parse_table(lines: list[str]) -> dict | None:
     """Markdown-Tabelle -> Notion table block."""
-    # Mindestens Header + Separator + 1 Zeile
     if len(lines) < 2:
         return None
 
@@ -277,12 +349,10 @@ def parse_table(lines: list[str]) -> dict | None:
         return [c.strip() for c in cells]
 
     header_cells = split_row(lines[0])
-    # Zeile 2 ist Separator (---|---), überspringen
     body_rows = [split_row(l) for l in lines[2:]]
     width = len(header_cells)
 
     def row_to_block(cells: list[str]) -> dict:
-        # Auf gleiche Breite padden
         while len(cells) < width:
             cells.append("")
         return {
@@ -305,7 +375,7 @@ def parse_table(lines: list[str]) -> dict | None:
 
 def markdown_to_blocks(md: str) -> list[dict]:
     """Konvertiert Markdown in eine Liste von Notion-Block-Dicts."""
-    # Wiki-Links ([[Page|Label]]) vorab zu normalen Markdown-Links umschreiben
+    # Wiki-Links vorab zu normalen Markdown-Links umschreiben
     md = convert_wiki_links(md)
 
     blocks: list[dict] = []
@@ -327,6 +397,13 @@ def markdown_to_blocks(md: str) -> list[dict]:
             i += 1
             continue
 
+        # Bild (Markdown ![alt](url), [![alt](img)](link), oder <img>)
+        image_block = parse_image_line(stripped)
+        if image_block:
+            blocks.append(image_block)
+            i += 1
+            continue
+
         # Code block
         if stripped.startswith("```"):
             lang = stripped[3:].strip() or "plain text"
@@ -335,9 +412,8 @@ def markdown_to_blocks(md: str) -> list[dict]:
             while i < len(lines) and not lines[i].strip().startswith("```"):
                 code_lines.append(lines[i])
                 i += 1
-            i += 1  # closing ```
+            i += 1
             code_content = "\n".join(code_lines)
-            # Notion unterstützt nur bestimmte Sprachen
             valid_langs = {
                 "bash", "shell", "python", "javascript", "typescript", "json",
                 "yaml", "html", "css", "sql", "markdown", "docker", "dockerfile",
@@ -383,7 +459,7 @@ def markdown_to_blocks(md: str) -> list[dict]:
             })
             continue
 
-        # Task-List (GitHub-Style: "- [ ] foo" oder "- [x] foo")
+        # Task-List (- [ ] / - [x])
         task_match = re.match(r"^[-*+]\s+\[([ xX])\]\s+(.+)$", stripped)
         if task_match:
             checked = task_match.group(1).lower() == "x"
@@ -418,9 +494,8 @@ def markdown_to_blocks(md: str) -> list[dict]:
             i += 1
             continue
 
-        # Table (Header-Zeile mit | erkannt)
+        # Table
         if "|" in stripped and stripped.count("|") >= 2:
-            # Prüfen ob nächste Zeile eine Separator-Zeile ist
             if i + 1 < len(lines) and re.match(r"^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?\s*$",
                                                 lines[i + 1].strip()):
                 table_lines = [lines[i], lines[i + 1]]
@@ -467,33 +542,36 @@ def main() -> int:
         print(f"  - Archiviere: {title}")
         archive_page(page["id"])
 
-    # 2. Home.md als Inhalt der Parent-Seite (falls vorhanden)
-    home_file = WIKI_DIR / "Home.md"
-    if home_file.exists():
-        print(f"\nAktualisiere Parent-Seite mit Home.md...")
-        home_md = home_file.read_text(encoding="utf-8")
-        # Sync-Timestamp voranstellen
+    # 2. README.md (aus Haupt-Repo) als Inhalt der Parent-Seite
+    readme_file = REPO_DIR / "README.md"
+    if readme_file.exists():
+        print(f"\nAktualisiere Parent-Seite mit README.md...")
+        readme_md = readme_file.read_text(encoding="utf-8")
         timestamp = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime())
-        intro = (f"> **Automatisch gespiegelt** aus dem GitHub Wiki.\n"
+        intro = (f"> **Automatisch gespiegelt** aus dem GitHub Repository.\n"
                  f"> Letzter Sync: {timestamp}\n"
-                 f"> Quelle: https://github.com/Bolmir/unraid-nas-docs/wiki\n\n")
-        home_blocks = markdown_to_blocks(intro + home_md)
-        replace_page_content(PARENT_PAGE_ID, home_blocks)
+                 f"> Quelle: https://github.com/Bolmir/unraid-nas-docs\n\n")
+        readme_blocks = markdown_to_blocks(intro + readme_md)
+        replace_page_content(PARENT_PAGE_ID, readme_blocks)
+    else:
+        print(f"  README.md nicht gefunden unter {readme_file} — "
+              f"Parent-Seite bleibt unverändert.")
 
-    # 3. Alle anderen .md-Dateien als Unterseiten anlegen
+    # 3. Alle Wiki-.md-Dateien als Unterseiten anlegen
     print(f"\nErstelle Unterseiten...")
     for md_file in md_files:
-        if md_file.name == "Home.md":
+        if md_file.name.startswith("_"):
             continue
-        if md_file.name.startswith("_"):  # _Sidebar.md, _Footer.md
+        if md_file.name == "Home.md":
             continue
 
         title = slug_to_title(md_file.name)
-        print(f"  - Erstelle: {title}")
+        icon = PAGE_EMOJI_MAP.get(title, "📄")
+        print(f"  - Erstelle: {icon} {title}")
         md = md_file.read_text(encoding="utf-8")
         blocks = markdown_to_blocks(md)
         try:
-            create_page(PARENT_PAGE_ID, title, blocks)
+            create_page(PARENT_PAGE_ID, title, blocks, icon=icon)
         except Exception as e:
             print(f"    FEHLER beim Anlegen von {title}: {e}", file=sys.stderr)
 
