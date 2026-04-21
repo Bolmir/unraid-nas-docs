@@ -523,68 +523,47 @@ def markdown_to_blocks(md: str) -> list[dict]:
         })
         i += 1
 
-    # Post-Processing: Bilder in Column-Layouts gruppieren
+    # Post-Processing: Bild-Layout
     blocks = group_images_into_columns(blocks)
 
     return blocks
 
 
 def group_images_into_columns(blocks: list[dict]) -> list[dict]:
-    """Fasst aufeinanderfolgende image-Blocks in Notion column_list-Blocks
-    zusammen (→ Bilder nebeneinander statt untereinander).
+    """Post-Processing für Bild-Blöcke.
 
-    width_ratio erzwingt gleiche Spaltenbreiten, damit Badges trotz
-    unterschiedlicher Original-Breite gleich gross gerendert werden.
-
-    Sonderfall: Ein einzelnes Bild wird mit einer leeren Dummy-Spalte daneben
-    gepackt, damit es nur halbe Breite einnimmt."""
+    - Mehrere aufeinanderfolgende Bilder (z.B. Badges) → bleiben untereinander
+      in ihrer nativen Grösse. Keine Column-Tricks.
+    - Einzelnes Bild → wird in ein 2-Spalten-Layout mit leerer Dummy-Spalte
+      gepackt, damit es nur die halbe Breite einnimmt (sonst nimmt Notion
+      immer die volle Seitenbreite)."""
     result = []
     i = 0
     while i < len(blocks):
         block = blocks[i]
         if block.get("type") == "image":
-            image_group = [block]
-            j = i + 1
-            while j < len(blocks) and blocks[j].get("type") == "image":
-                image_group.append(blocks[j])
-                j += 1
+            # Prüfen ob direkt ein weiteres Bild folgt oder vorausgeht
+            next_is_image = (
+                i + 1 < len(blocks) and blocks[i + 1].get("type") == "image"
+            )
+            prev_is_image = result and result[-1].get("type") == "image"
 
-            if len(image_group) >= 2:
-                # Mehrere Bilder → alle nebeneinander in Columns packen.
-                # width_ratio erzwingt gleiche Spaltenbreite → Badges gleich gross.
-                ratio = 1.0 / len(image_group)
-                columns = [
-                    {
-                        "type": "column",
-                        "column": {
-                            "width_ratio": ratio,
-                            "children": [img],
-                        },
-                    }
-                    for img in image_group
-                ]
-                result.append({
-                    "type": "column_list",
-                    "column_list": {"children": columns},
-                })
+            if next_is_image or prev_is_image:
+                # Teil einer Bildergruppe → einfach untereinander ausgeben
+                result.append(block)
             else:
-                # Einzelnes Bild → mit leerer Dummy-Spalte daneben
-                # (damit es nicht volle Breite einnimmt).
+                # Wirklich einzelnes Bild → in Column-Layout mit Dummy-Spalte
                 result.append({
                     "type": "column_list",
                     "column_list": {
                         "children": [
                             {
                                 "type": "column",
-                                "column": {
-                                    "width_ratio": 0.5,
-                                    "children": [image_group[0]],
-                                },
+                                "column": {"children": [block]},
                             },
                             {
                                 "type": "column",
                                 "column": {
-                                    "width_ratio": 0.5,
                                     "children": [
                                         {
                                             "type": "paragraph",
@@ -596,7 +575,7 @@ def group_images_into_columns(blocks: list[dict]) -> list[dict]:
                         ],
                     },
                 })
-            i = j
+            i += 1
         else:
             result.append(block)
             i += 1
